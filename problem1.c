@@ -204,13 +204,16 @@ void* thread_function(void* args) {
 	//printf("num_of_operations: %d\n", num_of_operations);
     int first_digit = thread_id;
     int second_digit = (thread_id + 1) % 9;
+    // use Consistent Lock Ordering to avoid deadlock
+    int first_sem = (first_digit < second_digit) ? first_digit : second_digit;
+    int second_sem = (first_digit < second_digit) ? second_digit : first_digit;
 
     for (int i = 0; i < num_of_operations; ++i) { 
         // lock 2 semaphores
-        sem_wait(params->semaphores[first_digit]);
-        sem_wait(params->semaphores[second_digit]);
+        sem_wait(params->semaphores[first_sem]);
+        sem_wait(params->semaphores[second_sem]);
 		//printf("Thread %d: Started\n", thread_id+1);
-
+	
         // read the two digits
 		int digit1 = params->shared_var[first_digit];
 		int digit2 = params->shared_var[second_digit];
@@ -232,8 +235,8 @@ void* thread_function(void* args) {
         printf("Thread %d: Modified digits[%d] and digits[%d] from %d and %d to %d and %d\n", thread_id+1, first_digit+1, second_digit+1, prev_digit1, prev_digit2, digit1, digit2);
 
         // unlock 2 semaphores
-        sem_post(params->semaphores[first_digit]);
-        sem_post(params->semaphores[second_digit]);
+        sem_post(params->semaphores[first_sem]);
+        sem_post(params->semaphores[second_sem]);
     }
 
     pthread_exit(NULL);
