@@ -20,7 +20,7 @@ long int global_var = 0;
 // this struct is used to pass parameters to the thread function
 typedef struct {
     int thread_id;
-    sem_t* semaphores[9];
+    sem_t* sem[9];
     long int *shared_var;
 } thread_params;
 
@@ -50,7 +50,7 @@ int main(int argc, char **argv)
 	global_var = strtol(argv[2], NULL, 10);
 
    	/*
-		Creating semaphores. Mutex semaphore is used to acheive mutual
+		Creating sem. Mutex semaphore is used to acheive mutual
 		exclusion while processes access (and read or modify) the global
 		variable, local variable, and the shared memory.
 	*/ 
@@ -96,7 +96,7 @@ int main(int argc, char **argv)
 	    pointer.
 	*/
 
-	if (fork() == 0) { // Child Process
+	if (fork() == 0) { // Child Process 
         
 		printf("Child Process: Child PID is %jd\n", (intmax_t) getpid());
 		
@@ -200,20 +200,20 @@ void* thread_function(void* args) {
     thread_params* params = (thread_params*)args;
     int thread_id = params->thread_id;
 	int num_of_operations = global_var;
-	
+	printf("Ready: Thread %d\n", thread_id+1);
 	//printf("num_of_operations: %d\n", num_of_operations);
     int first_digit = thread_id;
     int second_digit = (thread_id + 1) % 9;
-    // use Consistent Lock Ordering to avoid deadlock
-    int first_sem = (first_digit < second_digit) ? first_digit : second_digit;
+	// use Consistent Lock Ordering to avoid deadlock
+	int first_sem = (first_digit < second_digit) ? first_digit : second_digit;
     int second_sem = (first_digit < second_digit) ? second_digit : first_digit;
 
     for (int i = 0; i < num_of_operations; ++i) { 
-        // lock 2 semaphores
-        sem_wait(params->semaphores[first_sem]);
-        sem_wait(params->semaphores[second_sem]);
+        // lock 2 sem
+        sem_wait(params->sem[first_sem]);
+        sem_wait(params->sem[second_sem]);
 		//printf("Thread %d: Started\n", thread_id+1);
-	
+
         // read the two digits
 		int digit1 = params->shared_var[first_digit];
 		int digit2 = params->shared_var[second_digit];
@@ -222,7 +222,8 @@ void* thread_function(void* args) {
 		int prev_digit2 = digit2;
 
 		// calculate increment
-		int increment = (thread_id + 1) & (digit1 + digit2);
+		//int increment = (thread_id + 1) & (digit1 + digit2);
+		int increment = (thread_id + 1);
 
 		// update the two digits
 		digit1 = (digit1 + increment) % 10;
@@ -234,9 +235,9 @@ void* thread_function(void* args) {
 
         printf("Thread %d: Modified digits[%d] and digits[%d] from %d and %d to %d and %d\n", thread_id+1, first_digit+1, second_digit+1, prev_digit1, prev_digit2, digit1, digit2);
 
-        // unlock 2 semaphores
-        sem_post(params->semaphores[first_sem]);
-        sem_post(params->semaphores[second_sem]);
+        // unlock 2 sem
+        sem_post(params->sem[first_sem]);
+        sem_post(params->sem[second_sem]);
     }
 
     pthread_exit(NULL);
@@ -249,7 +250,7 @@ void* thread_function(void* args) {
 void multi_threads_run(long int input_param)
 {
 	pthread_t threads[9];
-    sem_t* semaphores[9];
+    sem_t* sem[9];
     thread_params params[9];
     long int shared_var[9];
 
@@ -259,13 +260,13 @@ void multi_threads_run(long int input_param)
 		printf("shared_var[%d]: %ld\n", i, shared_var[i]);
     }
 
-    // create semaphores
+    // create sem
     for (int i = 0; i < 9; ++i) {
         char sem_name[20];
 		sprintf(sem_name, "/sem_%d", i); // create a unique name for the semaphore
 		sem_unlink(sem_name);            //guarantees that the semaphore is destroyed when the program exits
-		semaphores[i] = sem_open(sem_name, O_CREAT, 0644, 1);
-		if (semaphores[i] == SEM_FAILED) {
+		sem[i] = sem_open(sem_name, O_CREAT, 0644, 1);
+		if (sem[i] == SEM_FAILED) {
 			perror("sem_open failed");
 			exit(EXIT_FAILURE);
 		}
@@ -275,7 +276,7 @@ void multi_threads_run(long int input_param)
     for (int i = 0; i < 9; ++i) {
         params[i].thread_id = i;
         params[i].shared_var = shared_var;
-        memcpy(params[i].semaphores, semaphores, sizeof(semaphores));// pass the semaphores to the thread function
+        memcpy(params[i].sem, sem, sizeof(sem));// pass the sem to the thread function
         pthread_create(&threads[i], NULL, thread_function, (void*)&params[i]);
     }
 
@@ -284,9 +285,9 @@ void multi_threads_run(long int input_param)
         pthread_join(threads[i], NULL);
     }
 	
-	for (int i = 0; i < 9; ++i) {
-        printf("Final shared_var[%d]: %ld\n", i+1, shared_var[i]);
-    }
+	// for (int i = 0; i < 9; ++i) {
+    //     printf("Final shared_var[%d]: %ld\n", i+1, shared_var[i]);
+    // }
 
     // output the final result
     long int result = 0;
@@ -295,12 +296,12 @@ void multi_threads_run(long int input_param)
     }
 	// call the function to save the result to a file
     saveResult("p1_result.txt", result);
-    printf("Final result saved to p1_result.txt\n");
+    // printf("Final result saved to p1_result.txt\n");
     printf("Final result: %ld\n", result);
 
-    // close and unlink semaphores
+    // close and unlink sem
     for (int i = 0; i < 9; ++i) {
-        sem_close(semaphores[i]);
+        sem_close(sem[i]);
         char sem_name[20];
         sprintf(sem_name, "sem_%d", i);
         sem_unlink(sem_name);
